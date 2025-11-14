@@ -1,8 +1,6 @@
 services:
     sharelatex:
         restart: always
-        # Server Pro users:
-        # image: quay.io/sharelatex/sharelatex-pro
         image: sharelatex/sharelatex
         container_name: sharelatex-overleaf
         depends_on:
@@ -14,12 +12,20 @@ services:
             - 85:80
         stop_grace_period: 60s
         volumes:
-            - ~/sharelatex_data:/var/lib/overleaf
-            ########################################################################
-            ####  Server Pro: Uncomment the following line to mount the docker  ####
-            ####             socket, required for Sibling Containers to work    ####
-            ########################################################################
-            # - /var/run/docker.sock:/var/run/docker.sock
+            - ./overleaf-data/sharelatex_data:/var/lib/overleaf
+        networks:
+          - proxy
+          - default
+        labels:
+          - "traefik.enable=true"
+          - "traefik.docker.network=proxy"
+
+          # HTTP Route
+          - "traefik.http.routers.overleaf.entrypoints=http"
+          - "traefik.http.routers.overleaf.rule=Host(`overleaf.${DOMAIN:-localhost}`)"
+          - "traefik.http.routers.overleaf.service=overleaf"
+          - "traefik.http.services.overleaf.loadbalancer.server.port=80"
+
         environment:
 
             OVERLEAF_APP_NAME: Overleaf Community Edition
@@ -42,15 +48,15 @@ services:
             ## Set for SSL via nginx-proxy
             #VIRTUAL_HOST: 103.112.212.22
 
-            OVERLEAF_SITE_URL: http://192.168.8.157:85
-            # OVERLEAF_NAV_TITLE: Overleaf Community Edition
+            OVERLEAF_SITE_URL: http://overleaf.data.apecia.local
+            OVERLEAF_NAV_TITLE: Overleaf Community Edition
             # OVERLEAF_HEADER_IMAGE_URL: http://example.com/mylogo.png
-            # OVERLEAF_ADMIN_EMAIL: support@it.com
+            OVERLEAF_ADMIN_EMAIL: hazman@apecia.com
 
             # OVERLEAF_LEFT_FOOTER: '[{"text": "Another page I want to link to can be found <a href=\"here\">here</a>"} ]'
             # OVERLEAF_RIGHT_FOOTER: '[{"text": "Hello I am on the Right"} ]'
 
-            # OVERLEAF_EMAIL_FROM_ADDRESS: "hello@example.com"
+            OVERLEAF_EMAIL_FROM_ADDRESS: "hazman@apecia.com"
 
             # OVERLEAF_EMAIL_AWS_SES_ACCESS_KEY_ID:
             # OVERLEAF_EMAIL_AWS_SES_SECRET_KEY:
@@ -68,49 +74,13 @@ services:
 
             # ENABLE_CRON_RESOURCE_DELETION: true
 
-            ################
-            ## Server Pro ##
-            ################
-
-            ## The Community Edition is intended for use in environments where all users are trusted and is not appropriate for
-            ## scenarios where isolation of users is required. Sandboxed Compiles are not available in the Community Edition,
-            ## so the following environment variables must be commented out to avoid compile issues.
-            ##
-            ## Sandboxed Compiles: https://docs.overleaf.com/on-premises/configuration/overleaf-toolkit/server-pro-only-configuration/sandboxed-compiles
-            # https://github.com/overleaf/overleaf/issues/1354
-            #SANDBOXED_COMPILES: 'true'
-            ### Bind-mount source for /var/lib/overleaf/data/compiles inside the container.
-            #SANDBOXED_COMPILES_HOST_DIR_COMPILES: '/home/user/sharelatex_data/data/compiles'
-            ### Bind-mount source for /var/lib/overleaf/data/output inside the container.
-            #SANDBOXED_COMPILES_HOST_DIR_OUTPUT: '/home/user/sharelatex_data/data/output'
-            ### Backwards compatibility (before Server Pro 5.5)
-            #DOCKER_RUNNER: 'true'
-            #SANDBOXED_COMPILES_SIBLING_CONTAINERS: 'true'
-
-            ## Works with test LDAP server shown at bottom of docker compose
-            # OVERLEAF_LDAP_URL: 'ldap://ldap:389'
-            # OVERLEAF_LDAP_SEARCH_BASE: 'ou=people,dc=planetexpress,dc=com'
-            # OVERLEAF_LDAP_SEARCH_FILTER: '(uid={{username}})'
-            # OVERLEAF_LDAP_BIND_DN: 'cn=admin,dc=planetexpress,dc=com'
-            # OVERLEAF_LDAP_BIND_CREDENTIALS: 'GoodNewsEveryone'
-            # OVERLEAF_LDAP_EMAIL_ATT: 'mail'
-            # OVERLEAF_LDAP_NAME_ATT: 'cn'
-            # OVERLEAF_LDAP_LAST_NAME_ATT: 'sn'
-            # OVERLEAF_LDAP_UPDATE_USER_DETAILS_ON_LOGIN: 'true'
-
-            # OVERLEAF_TEMPLATES_USER_ID: "578773160210479700917ee5"
-            # OVERLEAF_NEW_PROJECT_TEMPLATE_LINKS: '[ {"name":"All Templates","url":"/templates/all"}]'
-
-
-            # OVERLEAF_PROXY_LEARN: "true"
-
     mongo:
         restart: always
         image: mongo:6.0
         container_name: sharelatex-mongo
         command: '--replSet overleaf'
         volumes:
-            - ~/mongo_data:/data/db
+            - ./overleaf-data/mongo_data:/data/db
             - ./bin/shared/mongodb-init-replica-set.js:/docker-entrypoint-initdb.d/mongodb-init-replica-set.js
         environment:
           MONGO_INITDB_DATABASE: sharelatex
@@ -129,24 +99,8 @@ services:
         image: redis:6.2
         container_name: sharelatex-redis
         volumes:
-            - ~/redis_data:/data
+            - ./overleaf-data/redis_data:/data
 
-    # ldap:
-    #    restart: always
-    #    image: rroemhild/test-openldap
-    #    container_name: ldap
-
-    # See https://github.com/jwilder/nginx-proxy for documentation on how to configure the nginx-proxy container,
-    # and https://github.com/overleaf/overleaf/wiki/HTTPS-reverse-proxy-using-Nginx for an example of some recommended
-    # settings. We recommend using a properly managed nginx instance outside of the Overleaf Server Pro setup,
-    # but the example here can be used if you'd prefer to run everything with docker-compose
-
-    # nginx-proxy:
-    #     image: jwilder/nginx-proxy
-    #     container_name: nginx-proxy
-    #     ports:
-    #       - "80:80"
-    #       - "443:443"
-    #     volumes:
-    #       - /var/run/docker.sock:/tmp/docker.sock:ro
-    #       - /home/overleaf/tmp:/etc/nginx/certs
+networks:
+  proxy:
+    external: true
